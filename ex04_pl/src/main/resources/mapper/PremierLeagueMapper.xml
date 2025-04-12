@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.akw.ex04_pl.mapper.PremierLeagueMapper">
+<!--    API 1. 후반전 클러치 타임 분석 API-->
+    <select id="getClutchGoals" resultType="com.akw.ex04_pl.dto.Min75GoalsDto">
+        select
+        c.club_name as clubName,
+        m.player_name as playerName,
+        m.player_assisted as playerAssisted,
+        m.minute,
+        m.result,
+        m.situation,
+        m.shot_type as shotType
+        FROM match_events m
+        join clubs c on (m.which_side = 'h' and m.home_club_id = c.club_id) or (m.which_side = 'a' and m.away_club_id = c.club_id)
+        WHERE m.minute >= 75
+    </select>
+
+<!--    API 2. 시간대별 전체 골 분포 (시즌별 비교용 API)-->
+    <select id="getSeasonTimeRangeGoals" parameterType="String" resultType="com.akw.ex04_pl.dto.TimeRangeGoalsDto">
+        select
+        season,
+        case
+            when minute between 0 and 15 then '0-15'
+            when minute between 16 and 30 then '16-30'
+            when minute between 31 and 45 then '31-45+'
+            when minute between 46 and 60 then '46-60'
+            when minute between 61 and 75 then '61-75'
+            when minute >= 76 then '76-90+'
+            else 'etc.'
+        end as timeRange,
+        count(*) as goals
+        from match_events
+        where season = #{season}
+        group by season, timeRange
+        order by season, timeRange;
+    </select>
+
+<!--    API 3.특정 시즌/팀의 경기 결과 조회 API-->
+    <select id="getClubMatchResult" resultType="com.akw.ex04_pl.dto.ClubMatchResultDto">
+        SELECT
+        m.match_id as matchId,
+        m.season as season,
+        CASE
+            WHEN m.home_club_id = #{clubId} THEN 'HOME'
+            WHEN m.away_club_id = #{clubId} THEN 'AWAY'
+        END AS matchType,
+        c1.club_name AS homeTeam,
+        c2.club_name AS awayTeam,
+        m.h_goals as hGoals,
+        m.a_goals as aGoals,
+        CASE
+            WHEN m.home_club_id = #{clubId} AND m.h_goals > m.a_goals THEN 'WIN'
+            WHEN m.away_club_id = #{clubId} AND m.a_goals > m.h_goals THEN 'WIN'
+            WHEN m.h_goals = m.a_goals THEN 'DRAW'
+            ELSE 'LOSE'
+        END AS result
+        FROM matches m
+        JOIN clubs c1 ON m.home_club_id = c1.club_id
+        JOIN clubs c2 ON m.away_club_id = c2.club_id
+        WHERE season = #{season}
+        AND (m.home_club_id = #{clubId} OR m.away_club_id = #{clubId})
+        <if test="matchType != null">
+            AND (
+                (#{matchType} = 'HOME' AND m.home_club_id = #{clubId}) OR
+                (#{matchType} = 'AWAY' AND m.away_club_id = #{clubId})
+            )
+        </if>
+        <if test="resultFilter != null">
+            AND (
+                (#{resultFilter} = 'WIN' AND
+                    ((m.home_club_id = #{clubId} AND m.h_goals > m.a_goals) OR
+                     (m.away_club_id = #{clubId} AND m.a_goals > m.h_goals)))
+                OR
+                (#{resultFilter} = 'DRAW' AND m.h_goals = m.a_goals) OR
+                (#{resultFilter} = 'LOSE' AND
+                    ((m.home_club_id = #{clubId} AND m.a_goals > m.h_goals) OR
+                     (m.away_club_id = #{clubId} AND m.h_goals > m.a_goals)))
+            )
+        </if>
+        ORDER BY m.match_id;
+    </select>
+
+<!--    API 4.선수의 시즌별 성과 비교 API-->
+    <select id="getPlayerResult" resultType="com.akw.ex04_pl.dto.PlayerResultDto">
+        SELECT
+        p.player_name as playerName,
+        p.position,
+        ps.season,
+        ps.appearances,
+        ps.goals,
+        ps.assists,
+        ps.passes,
+        ps.tackles,
+        ps.interceptions,
+        ps.duels_won,
+        ps.saves,
+        ps.shots,
+        ps.shots_on_target
+        FROM player_stats ps
+        JOIN players p ON ps.player_id = p.player_id
+        WHERE p.player_id = #{playerId}
+        ORDER BY ps.season;
+    </select>
+
+<!--    API 5.동일 포지션 선수 간 성과 비교 API-->
+    <select id="getRankOfForward" resultType="com.akw.ex04_pl.dto.api5.ForwardRankDto">
+        SELECT
+        p.player_name as playerName,
+        ps.season,
+        ps.goals,
+        ps.goals_per_match as goalsPerMatch,
+        ps.shots_on_target as shotsOnTarget,
+        ps.shooting_accuracy_pct as shootingAccuracy,
+        ps.big_chances_missed as bigChanceMiss,
+        ps.headed_goals as headedGoals,
+        ps.goals_right_foot as goalsRightFoot,
+        ps.goals_left_foot as goalsLeftFoot,
+        ps.hit_woodwork as hitWoodwork,
+        ps.penalties_scored as penaltiesScored,
+        ps.freekicks_scored as freekicksScored,
+        ps.shots
+        FROM players p
+        JOIN player_stats ps ON p.player_id = ps.player_id
+        WHERE p.position = 'Forward'
+        and ps.season = #{season}
+        ORDER BY ps.goals desc, goals_per_match desc, shots_on_target desc, shooting_accuracy_pct desc, big_chances_missed desc;
+    </select>
+    <select id="getRankOfMidfielder" resultType="com.akw.ex04_pl.dto.api5.MidfielderRankDto">
+        SELECT
+        p.player_name as playerName,
+        ps.season,
+        ps.assists,
+        ps.big_chances_created as bigChanceCreated,
+        ps.passes,
+        ps.passes_per_match as passesPerMatch,
+        ps.crosses,
+        ps.cross_accuracy_pct as crossAccuracy,
+        ps.through_balls as throughBalls,
+        ps.accurate_long_balls as accurateLongBalls
+        FROM players p
+        JOIN player_stats ps ON p.player_id = ps.player_id
+        WHERE p.position = 'Midfielder'
+        and ps.season = #{season}
+        ORDER BY assists desc, big_chances_created desc, passes desc, passes_per_match desc;
+    </select>
+    <select id="getRankOfDefender" resultType="com.akw.ex04_pl.dto.api5.DefenderRankDto">
+        SELECT
+        p.player_name as playerName,
+        ps.season,
+        ps.tackles,
+        ps.interceptions,
+        ps.clearances,
+        ps.clean_sheets as cleanSheets,
+        ps.appearances,
+        ps.goals_conceded as goalsConceded,
+        ps.tackle_success_pct as tackleSuccessPct,
+        ps.last_man_tackles as lastManTackles,
+        ps.blocked_shots as blockedShots,
+        ps.headed_clearance as headedClearance,
+        ps.clearances_off_line as clearanceOffLine,
+        ps.recoveries,
+        ps.duels_won as duelsWon,
+        ps.duels_lost as duelsLost,
+        ps.successful_50_50s as successfulFifty,
+        ps.aerial_battles_won as aerialBattlesWon,
+        ps.aerial_battles_lost as aerialBattlesLost,
+        ps.own_goals as ownGoals,
+        ps.errors_leading_to_goal as errorsLoadingToGoal
+        FROM player_stats ps
+        JOIN players p ON ps.player_id = p.player_id
+        WHERE p.position = 'Defender'
+        and ps.season = #{season}
+        ORDER BY tackles desc, interceptions desc, clearances desc, clean_sheets desc;
+    </select>
+    <select id="getRankOfGoalkeeper" resultType="com.akw.ex04_pl.dto.api5.GoalkeeperRankDto">
+        SELECT
+        p.player_name as playerName,
+        ps.season,
+        ps.saves,
+        ps.clean_sheets as cleanSheets,
+        ps.penalties_saved as penaltiesSaved,
+        ps.high_claims as highClaims,
+        ps.catches,
+        ps.goals_conceded as goalsConceded,
+        ps.appearances,
+        ps.punches,
+        ps.sweeper_clearances as sweeperClearances,
+        ps.throw_outs as throwOuts,
+        ps.goal_kicks as goalKicks
+        FROM player_stats ps
+        JOIN players p ON p.player_id = ps.player_id
+        WHERE p.position = 'Goalkeeper'
+        and ps.season = #{season}
+        ORDER BY saves desc, clean_sheets desc, penalties_saved desc, high_claims desc, catches desc, goals_conceded;
+    </select>
+
+    <select id="getClubRank" resultType="com.akw.ex04_pl.dto.ClubRankDto">
+        select
+            c.club_name as clubName,
+            cs.pts,
+            cs.total_goals as totalGoals,
+            cs.total_goals_cond as totalGoalsCond
+        from club_seasons cs
+        join clubs c on cs.club_id = c.club_id
+        where cs.season = #{season}
+        order by
+        <choose>
+            <when test="orderBy == 'pts'">
+                cs.pts desc,
+                cs.total_goals desc,
+                cs.total_goals_cond
+            </when>
+            <when test="orderBy == 'total_goals'">
+                cs.total_goals desc,
+                cs.pts desc,
+                cs.total_goals_cond
+            </when>
+            <when test="orderBy == 'total_goals_cond'">
+                cs.total_goals_cond,
+                cs.pts desc,
+                cs.total_goals desc
+            </when>
+        </choose>
+    </select>
+    
+    <select id="getPlayerAppearances" resultType="com.akw.ex04_pl.dto.PlayerAppearancesDto">
+        SELECT
+            p.player_name as playerName,
+            ps.season,
+            ps.appearances AS totalMatches,
+            ps.goals,
+            ps.assists
+        FROM player_stats ps
+        JOIN players p ON ps.player_id = p.player_id
+        WHERE p.player_id = #{playerId};
+    </select>
+</mapper>
