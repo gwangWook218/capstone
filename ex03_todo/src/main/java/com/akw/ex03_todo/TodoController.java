@@ -1,45 +1,40 @@
 package com.akw.ex03_todo;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.util.Optional;
 
 @RestController
-@RequestMapping("/api/todo")
+@RequestMapping("/todo")
 public class TodoController {
 
     @Autowired
-    private TodoService todoService;
+    TodoService todoService;
 
     @GetMapping
-    public List<Todo> findAll() {
-        return todoService.findAll();
+    public Iterable<Todo> selectAll() {
+        return todoService.selectAll();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Todo> findById(@PathVariable Long id) {
-        return todoService.findById(id)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public Optional<Todo> selectOneById(@PathVariable Integer id) {
+        return todoService.selectOneById(id);
     }
 
     @PostMapping
-    public Todo create(@RequestBody Todo todo) {
-        return todoService.create(todo);
+    public void insert(@RequestBody Todo todo) {
+        todoService.insert(todo);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Todo> update(@PathVariable Long id, @RequestBody Todo newTodo) {
-        return todoService.update(id, newTodo)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public void update(@PathVariable Integer id, @RequestBody Todo todo) {
+        todo.setId(id);
+        todoService.update(todo);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public void delete(@PathVariable Integer id) {
         todoService.delete(id);
-        return ResponseEntity.noContent().build();
     }
 }
