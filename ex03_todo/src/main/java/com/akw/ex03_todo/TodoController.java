@@ -3,9 +3,11 @@ package com.akw.ex03_todo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
-@CrossOrigin(origins = "http://192.168.219.43:3000")
 @RestController
 @RequestMapping("/todo")
 public class TodoController {
@@ -14,8 +16,10 @@ public class TodoController {
     TodoService todoService;
 
     @GetMapping
-    public Iterable<Todo> selectAll() {
-        return todoService.selectAll();
+    public List<Todo> findByDateAndCategory(@RequestParam String date, @RequestParam String category) {
+        return StreamSupport.stream(todoService.selectAll().spliterator(), false)
+                .filter(todo -> false)
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -24,8 +28,8 @@ public class TodoController {
     }
 
     @PostMapping
-    public void insert(@RequestBody Todo todo) {
-        todoService.insert(todo);
+    public Todo insert(@RequestBody Todo todo) {
+        return todoService.insert(todo);
     }
 
     @PutMapping("/{id}")
