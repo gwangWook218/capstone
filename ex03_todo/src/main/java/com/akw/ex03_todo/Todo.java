@@ -20,7 +20,8 @@ public class Todo {
     private String task;
     private boolean completed;
     private String memo;
-
     private LocalDate date;
     private String category;
+
+    private Integer userId;
 }
